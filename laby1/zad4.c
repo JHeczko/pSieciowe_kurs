@@ -1,18 +1,10 @@
 #include <stdbool.h>
 #include <stdio.h>
 
-bool check_one(const int ptr_value){
-    if(ptr_value <= 126 && ptr_value >= 32){
-        return true;
-    }else{
-        return false;
-    }
-}
-
 bool printable_buf(const char* ptr){
     char* buf = ptr;
     while(*buf != '\0'){
-        if(!check_one(*buf)){
+        if(!(*buf <= 126 && *buf >= 32)){
             return false;
         }
         printf("%c", *buf);

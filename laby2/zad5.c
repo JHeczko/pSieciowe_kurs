@@ -39,7 +39,7 @@ int main(int argc, char** argv){
         return 1;
     }
     unsigned char buf[13];
-    memcpy(buf, "Hello World!", 13);
+    memcpy(buf, "Hello World!\n", 13);
     bool keep_on_handling_clients = true;
     while (keep_on_handling_clients) {
 

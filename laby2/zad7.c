@@ -6,23 +6,38 @@
 #define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
 #include <stdlib.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <sys/errno.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <fcntl.h>
-#include <unistd.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
-#include <sys/errno.h>
+#include <stdbool.h>
+
+bool printable_buf(const char* ptr, int len){
+    char* buf = ptr;
+    for(int i = 0; i<len; i++){
+        if(!(*buf <= 126 && *buf >= 32)){
+            return false;
+        } else if(*buf == '\n' || *buf == '\r' || *buf == '\t'){
+            return false;
+        }
+        buf++;
+    }
+    return true;
+}
+
+void printNoWhiteSymbols(const char* stringToPrint){
+    char* ptr = stringToPrint;
+    while(*ptr != '\0'){
+        if(*ptr != '\n' && *ptr != '\r' && *ptr != '\t') {
+            printf("%c", *ptr);
+        }
+        ptr++;
+    }
+}
 
 int main(int argc, char** argv)
 {
-    int ADRESS;
+    int ADRESS = inet_addr(argv[1]);
     int convert = inet_pton(AF_INET, argv[1], &ADRESS);
     if(convert == 0 || convert == -1){
         perror("Inet_pton error");
@@ -54,9 +69,12 @@ int main(int argc, char** argv)
     while(cnt = read(sock,buf,16) !=0){
         if (cnt == -1) {
             perror("read");
-            return 1;
+            return -1;
+        }else if(printable_buf(buf,cnt) == false){
+            perror("Not printable buff");
+            return -1;
         }
-        printf("%s", buf);
+        printNoWhiteSymbols(buf);
     };
 
     rc = close(sock);
