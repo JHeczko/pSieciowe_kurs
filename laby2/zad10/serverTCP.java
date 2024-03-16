@@ -4,17 +4,24 @@ import java.io.IOException;
 import java.net.*;
 
 class SocketRunnable implements Runnable{
-    Socket clienSocket;
+    Socket clientSocket;
     SocketRunnable(Socket clientSocket){
-        this.clienSocket = clientSocket;
+        this.clientSocket = clientSocket;
     }
 
     public void run(){
-        String buf = "Hello im server";
-        BufferedOutputStream writeStream = new BufferedOutputStream(clientSocket.getOutputStream());
-        writeStream.write(buf.getBytes());
-    }
-} 
+        try{
+            String buf = "Hello im server";
+            BufferedOutputStream writeStream = new BufferedOutputStream(clientSocket.getOutputStream());
+            writeStream.write(buf.getBytes());
+            writeStream.flush();
+            writeStream.close();
+            clientSocket.close();
+        }catch(Exception e){
+            e.printStackTrace();
+        }
+    } 
+}
 
 public class serverTCP{
     public static void main(String[] args){

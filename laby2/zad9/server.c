@@ -38,7 +38,7 @@ int main(int argc, char** argv){
 
     struct sockaddr_in adressOfClient;
     memset(&adressOfClient, 0 ,sizeof(adressOfClient));
-    socklen_t lenAdressOfClient;
+    socklen_t lenAdressOfClient = sizeof(adressOfClient);
     char input[30];
     char* output = "Witam jestem serwer!";
     while(1) {
