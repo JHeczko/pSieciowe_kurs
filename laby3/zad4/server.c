@@ -20,20 +20,32 @@ char* buildAnswear(){
 
 bool validate(char str[], int len){
     int i = 0;
+    int newLine = false;
     int spaceOnceOccured = false;
     //Jesli pierwsza spacja to błąd
     if(str[0] == ' '){
         fprintf(stderr, "Space shouldnt be first\n");
         return false;
     }
-    while(i != len){
-        //jesli znak konca lini nie rob nic
-        if(str[i] == '\n'){
-            i++;
-            continue;
+    while(i < len){
+        // jesli '\n' sam bez konca lini to zle
+        if(str[i] == '\r'){
+           if(str[i+1] == '\n'){
+               str[i] = ' ';
+               str[i+1] = ' ';
+               i+=2;
+               newLine = true;
+               continue;
+           }
+        }
+
+        if(str[i] == ' ' && newLine){
+            fprintf(stderr, "Space at beginning of new line\n");
+            newLine = false;
+            return false;
         }
         //warunek sprawdzajacy biale znaki, ktore nie powinny sie pojawic, wiem ze tego nie bylo w poleceniu, ale tak poprostu to dodałem
-        if(str[i] == '\v' || str[i] == '\t'){
+        if(str[i] == '\v' || str[i] == '\t' || str[i] == '\0' || str[i] == '\n'){
             fprintf(stderr, "Forbidden symbols\n");
             return false;
         }
@@ -48,6 +60,7 @@ bool validate(char str[], int len){
         }else{
             spaceOnceOccured = false;
         }
+        newLine = false;
         i++;
     }
     //jesli na koncu mielismy spacje to dajemy blad
@@ -71,10 +84,8 @@ bool checkPalindrome(char word[], int len){
 
 void splitAndCheck(char* str){
     char *ptr = strtok(str, " ");
-
-    while(ptr != NULL)
-    {
-        printf("%d: ",checkPalindrome(ptr,strlen(ptr)));
+    while (ptr != NULL) {
+        printf("%d: ", checkPalindrome(ptr, strlen(ptr)));
         printf("%s\n", ptr);
         ptr = strtok(NULL, " ");
     }
@@ -82,7 +93,12 @@ void splitAndCheck(char* str){
 }
 
 int main(int argc, char** argv){
-    int PORT = atoi(argv[1]);
+    int PORT;
+    if(argc != 1) {
+        PORT = atoi(argv[1]);
+    }else{
+        PORT = 2020;
+    }
 
     int listenSocketDesctiption = socket(AF_INET, SOCK_DGRAM, 0);
     if(listenSocketDesctiption == -1){
@@ -123,15 +139,14 @@ int main(int argc, char** argv){
             perror("Receive: ");
             return -1;
         };
+        if(rcvValue != 63000){
+            input[rcvValue] = '\0';
+        }
 
         if(!validate(input, rcvValue)){
             output = "ERROR\n";
             ERROR = true;
         }else{
-            //tutaj troche dziwne, ale usuwam enter z konca jesli istnieje, bo wole usunąć niż potem robić przypadki w rozdzielaniu, wiem ze jest to nieeleganckie
-            if(input[rcvValue -1 ] == '\n') {
-                input[rcvValue - 1] = '\0';
-            }
             //rozdzielam i sprawdzam czy slowa sa palindormami i zmieniam stan zmiennej globalnej
             splitAndCheck(input);
             //buduje stringa odpowiedz, na podstawie ile mam palindomow
