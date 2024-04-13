@@ -1,11 +1,8 @@
+#pragma once
+
 #include <errno.h>
-#include <pthread.h>
-#include <signal.h>
 #include <stdarg.h>
-#include <stdbool.h>
-#include <stdint.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
@@ -13,7 +10,9 @@
 #include <netinet/in.h>
 #include <sys/select.h>
 #include <sys/socket.h>
-#include <sys/types.h>
+#include "validator.cpp"
+#include <ctype.h>
+
 
 #define ERROR -1
 #define LISTENING 0
@@ -21,92 +20,202 @@
 class Server{
 
 private:
-    char buf[2000];
     int status;
+    int bufSize;
     int listenSocketDescriptor;
     in_port_t port;
+    Validator validator;
 
 public:
-    Server(in_port_t port){
+    Server(in_port_t port, Validator validator){
         this->port = port;
+        this->bufSize = 2000;
+        this->validator = validator;
         int listenSocketDescriptor = startListening(port);
         if(listenSocketDescriptor == -1){
             this->status = ERROR;
             this->listenSocketDescriptor = -1;
-            log_printf("Server Initialized succesfully");
+            log_perror("Server error while trying to initialize");
         }else{
             this->status = LISTENING;
             this->listenSocketDescriptor = listenSocketDescriptor;
-            log_printf("Server error while trying to initialize");
+            log_printf("Server Initialized succesfully");
         };
     }
-    void select_loop(int srv_sock)
+    Server(in_port_t port, int bufSize, Validator validator){
+        this->port = port;
+        this->bufSize = bufSize;
+        this->validator = validator;
+        int listenSocketDescriptor = startListening(port);
+        if(listenSocketDescriptor == -1){
+            this->status = ERROR;
+            this->listenSocketDescriptor = -1;
+            log_perror("Server error while trying to initialize");
+        }else{
+            this->status = LISTENING;
+            this->listenSocketDescriptor = listenSocketDescriptor;
+            log_printf("Server Initialized succesfully");
+        };
+    }
+    void acceptLoop()
     {
-        fd_set sock_fds;    // zbiór deskryptorów otwartych gniazdek
+        if(status == ERROR){
+            log_perror("Server has error status");
+            return;
+        }
+
+        //Inicjalizacja zmiennych
+        fd_set selectSocketSet;    // zbiór deskryptorów otwartych gniazdek
         int max_fd;         // największy użyty numer deskryptora
+        char* buf = new char[bufSize+1];     // bufor do zczytywania
+        std::unordered_map<int,std::string> dataNotComplete;
 
         // na początku zbiór zawiera tylko gniazdko odbierające połączenia
-        FD_ZERO(&sock_fds);
-        FD_SET(srv_sock, &sock_fds);
-        max_fd = srv_sock;
+        FD_ZERO(&selectSocketSet);
+        FD_SET(listenSocketDescriptor, &selectSocketSet);
+        max_fd = listenSocketDescriptor;
 
         while (true) {
             log_printf("calling select()");
             // select() modyfikuje zawartość przekazanego mu zbioru, zostaną
             // w nim tylko deskryptory mające gotowe do odczytu dane
-            fd_set read_ready_fds = sock_fds;
-            int num = select(max_fd + 1, &read_ready_fds, NULL, NULL, NULL);
+            fd_set readReadySelectSocketSet = selectSocketSet;
+            int num = select(max_fd + 1, &readReadySelectSocketSet, NULL, NULL, NULL);
             if (num == -1) {
                 log_perror("select");
                 break;
             }
             log_printf("number of ready to read descriptors = %i", num);
-
             for (int fd = 0; fd <= max_fd; ++fd) {
-                if (! FD_ISSET(fd, &read_ready_fds)) {
+
+                if (! FD_ISSET(fd, &readReadySelectSocketSet)) {
                     continue;
                 }
 
-                if (fd == srv_sock) {
-
-                    int s = acceptClient(srv_sock);
+                if (fd == listenSocketDescriptor){
+                    int s = acceptClient(listenSocketDescriptor);
                     if (s == -1) {
                         goto break_out_of_main_loop;
-                    } else if (s >= FD_SETSIZE) {
+                    } else if (s >= FD_SETSIZE){
                         log_printf("%i cannot be added to a fd_set", s);
                         // tego klienta nie da się obsłużyć, więc zamknij gniazdko
                         closeSocket(s);
                         continue;
                     }
-                    FD_SET(s, &sock_fds);
+                    FD_SET(s, &selectSocketSet);
+                    if(dataNotComplete.find(s) != dataNotComplete.end()){
+                        dataNotComplete.erase(s);
+                    }
                     if (s > max_fd) {
                         max_fd = s;
                     }
-
                 } else {    // fd != srv_sock
+                    int read = readFromSocket(fd,buf,bufSize);
 
-                    if (readFromSocket(fd,buf, 2000) <= 0) {
-                        // druga strona zamknęła połączenie lub wystąpił błąd
-                        FD_CLR(fd, &sock_fds);
+                    if (read <= 0) { // druga strona zamknęła połączenie lub wystąpił błąd
+                        FD_CLR(fd, &selectSocketSet);
+                        if(dataNotComplete.find(fd) != dataNotComplete.end()){
+                            dataNotComplete.erase(fd);
+                        }
                         closeSocket(fd);
+                        continue;
+                    } else{ // tworzymy stringa
+                        buf[read] = '\0';
                     }
 
+                    std::string input = buf;
+                    int quantityReq = validator.validateReq(buf);
+
+                    // wstepne sprawdzenie przed zrobieniem podzielenia na zapytania czy sa dobre separatory
+                    if(validator.isError()){
+                        std::string output = validator.buildAnswear();
+                        int write = writeToSocket(fd,(void *)output.c_str(),output.length());
+                        validator.resetValidator();
+                        if(write == -1){
+                            log_perror("Write");
+                            FD_CLR(fd, &selectSocketSet);
+
+                            if(dataNotComplete.find(fd) != dataNotComplete.end()){
+                                dataNotComplete.erase(fd);
+                            }
+                            close(fd);
+                        }
+                    }
+
+                    //tablica zapytan
+                    std::vector<std::string> dataWithoutWhiteSymbols = validator.splitBySep(input);
+
+                    // logika dodawania niedokonczonego zapytania dla jednego znaku, bo to trudno sprawdzic w jendym warunku
+                    if(read == 1){
+                        if (dataNotComplete.find(fd) == dataNotComplete.end()) {
+                            dataNotComplete[fd] = dataWithoutWhiteSymbols.back();
+                        } else {
+                            dataNotComplete[fd] += dataWithoutWhiteSymbols.back();
+                        }
+                        continue;
+                    }
+                    // dodawanie niedokończonych danych do bufora do późniejszej obródbki
+                    if (buf[read - 1] != '\n' && buf[read - 2] != '\r') {
+                        if (dataNotComplete.find(fd) == dataNotComplete.end()) {
+                            dataNotComplete[fd] = dataWithoutWhiteSymbols.back();
+                        } else {
+                            dataNotComplete[fd] += dataWithoutWhiteSymbols.back();
+                        }
+                        dataWithoutWhiteSymbols.pop_back();
+                    } else{
+                        std::string temp = dataWithoutWhiteSymbols[0];
+                        dataWithoutWhiteSymbols.at(0) = dataNotComplete[fd]+temp;
+                        dataNotComplete.erase(fd);
+                    }
+
+                    if(quantityReq > 0){
+                        if (dataNotComplete.find(fd) != dataNotComplete.end()){
+                            std::string temp = dataWithoutWhiteSymbols[0];
+                            dataWithoutWhiteSymbols.at(0) = dataNotComplete[fd]+temp;
+                            dataNotComplete.erase(fd);
+                        }
+                    }
+
+                    // obrobka poszczegolnych zapytan i wysylanie odpowiedzi
+                    for(std::string& el : dataWithoutWhiteSymbols){
+                        validator.validate(el,el.length());
+                        validator.checkRequest(el);
+
+
+                        std::string output = validator.buildAnswear();
+                        int write = writeToSocket(fd,(void *)output.c_str(),output.length());
+                        validator.resetValidator();
+                        if(write == -1){
+                            log_perror("Write");
+                            if(dataNotComplete.find(fd) != dataNotComplete.end()){
+                                dataNotComplete.erase(fd);
+                            }
+                            FD_CLR(fd, &selectSocketSet);
+                            close(fd);
+                        }
+                    }
                 }
             }
         }
-        break_out_of_main_loop:
 
+        break_out_of_main_loop:
         // zamknij wszystkie połączenia z klientami
         for (int fd = 0; fd <= max_fd; ++fd) {
-            if (FD_ISSET(fd, &sock_fds) && fd != srv_sock) {
+            if (FD_ISSET(fd, &selectSocketSet) && fd != listenSocketDescriptor) {
+                if(dataNotComplete.find(fd) != dataNotComplete.end()){
+                    dataNotComplete.erase(fd);
+                }
                 closeSocket(fd);
             }
         }
+        delete[] buf;
     }
     int getStatus(){
         return status;
     }
-
+    ~Server(){
+        close(listenSocketDescriptor);
+    }
 protected:
     void log_error(const char * msg, int errnum)
     {
@@ -138,7 +247,7 @@ protected:
         // getpid() i gettid() zawsze wykonują się bezbłędnie
         pid_t pid = getpid();
 
-        len = snprintf(buf, sizeof(buf), "%02i:%02i:%02i.%06li PID=%ji",
+        len = snprintf(buf, sizeof(buf), "%02i:%02i:%02i.%06li PID=%ji ",
                        date_human.tm_hour, date_human.tm_min, date_human.tm_sec,
                        usec, (intmax_t) pid);
         if (len < 0) {
@@ -168,11 +277,10 @@ protected:
             return -1;
         }
 
-        struct sockaddr_in a = {
-                .sin_family = AF_INET,
-                .sin_addr.s_addr = htonl(INADDR_ANY),
-                .sin_port = htons(port)
-        };
+        struct sockaddr_in a;
+        a.sin_family = AF_INET;
+        a.sin_addr.s_addr = htonl(INADDR_ANY);
+        a.sin_port = htons(port);
 
         if (bind(s, (struct sockaddr *) &a, sizeof(a)) == -1) {
             perror("bind");
@@ -201,10 +309,10 @@ protected:
         }
         return rv;
     }
-    ssize_t writeToSocket(int fd, void * buf, size_t nbytes)
+    ssize_t writeToSocket(int fd, void * buf, int nbytes)
     {
         log_printf("calling write() on descriptor %i", fd);
-        ssize_t rv = write(fd, buf, nbytes);
+        int rv = write(fd, buf, nbytes);
         if (rv == -1) {
             log_perror("write");
         } else if (rv < nbytes) {
