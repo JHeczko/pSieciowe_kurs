@@ -9,7 +9,6 @@ import java.util.Scanner;
 
 public class Tester{
     public static final String ANSI_RESET = "\u001B[0m"; 
-    public static final String ANSI_YELLOW = "\u001B[33m";
     public static final String ANSI_RED = "\u001B[31m";
     public static final String ANSI_GREEN = "\u001B[32m";
       
@@ -18,9 +17,46 @@ public class Tester{
         BufferedOutputStream out = new BufferedOutputStream(testSock.getOutputStream());
         BufferedInputStream in = new BufferedInputStream(testSock.getInputStream());
 
-        out.write("kot".getBytes(StandardCharsets.US_ASCII));
+        out.write("tot".getBytes(StandardCharsets.US_ASCII));
         out.flush();
-        Thread.sleep(200);
+        Thread.sleep(100);
+        in.readNBytes(in.available());
+        out.write("\r\npies".getBytes(StandardCharsets.US_ASCII));
+        out.flush();
+        Thread.sleep(100);
+        while(in.available() == 0){
+        }
+        in.readNBytes(in.available());
+        out.write("\r\ntot".getBytes(StandardCharsets.US_ASCII));
+        out.flush();
+        Thread.sleep(100);
+        while(in.available() == 0){
+        }
+        in.readNBytes(in.available());
+        out.write("\r\npies".getBytes(StandardCharsets.US_ASCII));
+        out.flush();
+        Thread.sleep(100);
+        while(in.available() == 0){
+        }
+        in.readNBytes(in.available());
+        out.write("\r\ntot".getBytes(StandardCharsets.US_ASCII));
+        out.flush();
+        Thread.sleep(100);
+        while(in.available() == 0){
+        }
+        in.readNBytes(in.available());
+        out.write("\r\npies".getBytes(StandardCharsets.US_ASCII));
+        out.flush();
+        Thread.sleep(100);
+        while(in.available() == 0){
+        }
+        in.readNBytes(in.available());
+        out.write("\r\ntot".getBytes(StandardCharsets.US_ASCII));
+        out.flush();
+        Thread.sleep(100);
+        while(in.available() == 0){
+        }
+        in.readNBytes(in.available());
         out.write("\r\npies".getBytes(StandardCharsets.US_ASCII));
         out.flush();
 
@@ -28,7 +64,7 @@ public class Tester{
         }
 
         String answearString = new String(in.readNBytes(in.available()));
-        String answearCompareString = "0/1\r\n";
+        String answearCompareString = "1/1\r\n";
 
         answearString = answearString.replaceAll("\r\n","/r/n");
         answearCompareString = answearCompareString.replaceAll("\r\n","/r/n");
@@ -63,7 +99,7 @@ public class Tester{
             out.write(alfabet[i]);
             out.write(' ');
             out.flush();
-            Thread.sleep(30);
+            Thread.sleep(10);
         }
         out.write("z\r\n".getBytes(StandardCharsets.US_ASCII));
         out.flush();
@@ -108,7 +144,7 @@ public class Tester{
             while(in.available() == 0){
 
             }
-            Thread.sleep(500);
+            Thread.sleep(100);
             String answearString = new String(in.readNBytes(in.available()));
 
             answearString = answearString.replaceAll("\r","/r");
@@ -139,8 +175,8 @@ public class Tester{
             testy.setProperty("Ala i kot\r\n", "2/3\r\n");
             testy.setProperty("xyz\r\nucho oko\r\n", "0/1\r\n1/2\r\n");
             testy.setProperty("ABBA 1972\r\n", "ERROR\r\n");
-            testy.setProperty("b\\xc3\\xb3b i fasola\r\n", "ERROR\r\n");
-            testy.setProperty("oraz\\x00zero\r\n", "ERROR\r\n");
+            testy.setProperty("b\0c3\\xb3b i fasola\r\n", "ERROR\r\n");
+            testy.setProperty("oraz\0zero\r\n", "ERROR\r\n");
             testy.setProperty("Sam koniec\r", "ERROR\r\n");
             testy.setProperty("Literalnie\tLosowelitery\r\n", "ERROR\r\n");
 

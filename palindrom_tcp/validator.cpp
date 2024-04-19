@@ -75,7 +75,7 @@ public:
                 return false;
             }
             //warunek sprawdzajacy biale znaki, ktore nie powinny sie pojawic, wiem ze tego nie bylo w poleceniu, ale tak poprostu to dodałem
-            if(str[i] == '\v' || str[i] == '\t' || str[i] == '\0' || str[i] == '\n' || str[i] == '\r' || (str[i] == '\\' & str[i+1] == 'x')){
+            if(str[i] == '\v' || str[i] == '\t' || str[i] == '\0' || str[i] == '\n' || str[i] == '\r'){
                 fprintf(stderr, "Forbidden symbols\n");
                 error = true;
                 return false;
@@ -125,19 +125,10 @@ public:
 
     //char* str, const char* sep
     std::vector<std::string> splitBySep(std::string data){
-        //char *ptr = strtok(str, sep);
         std::vector<std::string> array;
 
-//        do {
-//            if(ptr != NULL) {
-//                array.push_back(ptr);
-//            }else{
-//                array.push_back("");
-//            }
-//            ptr = strtok(NULL, sep);
-//        }while (ptr != NULL);
         std::string buf = "";
-        for(int i = 0; i < data.size(); ++i){
+        for(size_t i = 0; i < data.size(); ++i){
             if(data[i] == '\r' && data[i+1] == '\n'){
                 array.push_back(buf);
                 buf = "";
@@ -152,22 +143,28 @@ public:
         return array;
     }
 
-    int validateReq(std::string data){
+    int countWholeReq(char* data, int sizeData){
         int licznik = 0;
-        for(int i = 0; i < data.size(); i++){
+        for(size_t i = 0; i < sizeData; i++){
+            if(data[i] == '\0'){
+                fprintf(stderr, "Zero symbol in beetwen\n");
+                error = true;
+                return -1;
+            }
             if(data[i] == '\r'){
                 if(data[i+1] == '\n'){
                     licznik++;
                     i++;
                 }else{
                     error = true;
+                    return -1;
                 }
             }
         }
         return licznik;
     }
 
-    void checkRequest(std::string req){
+    void checkForPalindrome(std::string req){
         if(error){
             return;
         }

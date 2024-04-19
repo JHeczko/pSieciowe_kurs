@@ -98,7 +98,7 @@ int main(int argc, char** argv){
         PORT = 2020;
     }
 
-    int listenSocketDesctiption = socket(AF_INET, SOCK_DGRAM, 0);
+    int listenSocketDesctiption = socket(AF_INET6, SOCK_DGRAM, 0);
     if(listenSocketDesctiption == -1){
         perror("Socket: ");
     }
@@ -106,8 +106,11 @@ int main(int argc, char** argv){
     struct sockaddr_in serverAdress = {
             .sin_addr.s_addr = INADDR_ANY,
             .sin_port = htons(PORT),
-            .sin_family = AF_INET
+            .sin_family = AF_INET6
     };
+
+    int no = 0;
+    setsockopt(listenSocketDesctiption, IPPROTO_IPV6, IPV6_V6ONLY, (void *)&no, sizeof(no));
 
     int bindReturn = bind(listenSocketDesctiption, (const struct sockaddr*)&serverAdress, sizeof(serverAdress));
     if(bindReturn == -1){

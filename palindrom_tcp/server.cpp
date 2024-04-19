@@ -124,7 +124,7 @@ public:
                     }
 
                     std::string input = buf;
-                    int quantityReq = validator.validateReq(buf);
+                    int quantityReq = validator.countWholeReq(buf, read);
 
                     // wstepne sprawdzenie przed zrobieniem podzielenia na zapytania czy sa dobre separatory
                     if(validator.isError()){
@@ -134,12 +134,12 @@ public:
                         if(write == -1){
                             log_perror("Write");
                             FD_CLR(fd, &selectSocketSet);
-
                             if(dataNotComplete.find(fd) != dataNotComplete.end()){
                                 dataNotComplete.erase(fd);
                             }
                             close(fd);
                         }
+                        continue;
                     }
 
                     //tablica zapytan
@@ -154,7 +154,17 @@ public:
                         }
                         continue;
                     }
-                    // dodawanie niedokończonych danych do bufora do późniejszej obródbki
+
+                    // jezeli mamy jakiekolwike zapytanie to wez dane z bufora i do niego dodaj, jezeli jest zero zapytan, to dalej
+                    if(quantityReq > 0){
+                        if (dataNotComplete.find(fd) != dataNotComplete.end()){
+                            std::string temp = dataWithoutWhiteSymbols[0];
+                            dataWithoutWhiteSymbols.at(0) = dataNotComplete[fd]+temp;
+                            dataNotComplete.erase(fd);
+                        }
+                    }
+
+                    // dodawanie niedokończonych danych do bufora w celu późniejszej obródbki
                     if (buf[read - 1] != '\n' && buf[read - 2] != '\r') {
                         if (dataNotComplete.find(fd) == dataNotComplete.end()) {
                             dataNotComplete[fd] = dataWithoutWhiteSymbols.back();
@@ -168,21 +178,13 @@ public:
                         dataNotComplete.erase(fd);
                     }
 
-                    if(quantityReq > 0){
-                        if (dataNotComplete.find(fd) != dataNotComplete.end()){
-                            std::string temp = dataWithoutWhiteSymbols[0];
-                            dataWithoutWhiteSymbols.at(0) = dataNotComplete[fd]+temp;
-                            dataNotComplete.erase(fd);
-                        }
-                    }
-
                     // obrobka poszczegolnych zapytan i wysylanie odpowiedzi
                     for(std::string& el : dataWithoutWhiteSymbols){
+                        log_printf("%s", el.c_str());
                         validator.validate(el,el.length());
-                        validator.checkRequest(el);
-
-
+                        validator.checkForPalindrome(el);
                         std::string output = validator.buildAnswear();
+
                         int write = writeToSocket(fd,(void *)output.c_str(),output.length());
                         validator.resetValidator();
                         if(write == -1){
@@ -244,7 +246,6 @@ protected:
         }
         usec = date_unix.tv_nsec / 1000;
 
-        // getpid() i gettid() zawsze wykonują się bezbłędnie
         pid_t pid = getpid();
 
         len = snprintf(buf, sizeof(buf), "%02i:%02i:%02i.%06li PID=%ji ",
@@ -263,8 +264,6 @@ protected:
         }
         len += i;
 
-        // zamień \0 kończące łańcuch na \n i wyślij całość na stdout, czyli na
-        // deskryptor nr 1; bez obsługi błędów aby nie komplikować przykładu
         buf[len] = '\n';
         write(1, buf, len + 1);
     }

@@ -16,7 +16,7 @@
 #include "server.cpp"
 #define ERROR -1
 #define LISTENING 0
-using namespace std;
+
 //class Validator{
 //private:
 //    int licznik;
@@ -38,23 +38,28 @@ using namespace std;
 //        return answear;
 //    }
 //
+//    bool isError(){
+//        return error;
+//    }
+//
 //    bool validate(std::string str, int len){
-//        int i = 0;
 //        int newLine = false;
 //        int spaceOnceOccured = false;
+//        if(error){
+//            return false;
+//        }
+//
 //        //Jesli pierwsza spacja to błąd
 //        if(str[0] == ' '){
 //            fprintf(stderr, "Space shouldnt be first\n");
 //            error = true;
 //            return false;
 //        }
-//        while(i < len){
+//        for(int i = 0; i<len; i++){
 //            // jesli '\n' sam bez konca lini to zle
 //            if(str[i] == '\r'){
 //                if(str[i+1] == '\n'){
-//                    str[i] = ' ';
-//                    str[i+1] = ' ';
-//                    i+=2;
+//                    i+=1;
 //                    newLine = true;
 //                    continue;
 //                }
@@ -67,7 +72,7 @@ using namespace std;
 //                return false;
 //            }
 //            //warunek sprawdzajacy biale znaki, ktore nie powinny sie pojawic, wiem ze tego nie bylo w poleceniu, ale tak poprostu to dodałem
-//            if(str[i] == '\v' || str[i] == '\t' || str[i] == '\0' || str[i] == '\n' || (str[i] == '\\' & str[i+1] == 'x')){
+//            if(str[i] == '\v' || str[i] == '\t' || str[i] == '\0' || str[i] == '\n' || str[i] == '\r' || (str[i] == '\\' && str[i+1] == 'x')){
 //                fprintf(stderr, "Forbidden symbols\n");
 //                error = true;
 //                return false;
@@ -85,7 +90,15 @@ using namespace std;
 //                spaceOnceOccured = false;
 //            }
 //            newLine = false;
-//            i++;
+//            if(!((str[i] >= 65 && str[i] <= 90))){
+//                if(!(str[i] >= 97 && str[i] <= 122)) {
+//                    if(str[i] != 32){
+//                        fprintf(stderr, "Not palidnorme symbol\n");
+//                        error = true;
+//                        return false;
+//                    }
+//                }
+//            }
 //        }
 //        //jesli na koncu mielismy spacje to dajemy blad
 //        if(spaceOnceOccured){
@@ -107,19 +120,39 @@ using namespace std;
 //        return true;
 //    }
 //
-//    std::vector<std::string> splitBySep(char* str, const char* sep){
-//        char *ptr = strtok(str, sep);
+//    //char* str, const char* sep
+//    std::vector<std::string> splitBySep(std::string data){
 //        std::vector<std::string> array;
 //
-//        do {
-//            if(ptr != NULL) {
-//                array.push_back(ptr);
-//            }else{
-//                array.push_back("");
+//        std::string buf = "";
+//        for(size_t i = 0; i < data.size(); ++i){
+//            if(data[i] == '\r' && data[i+1] == '\n'){
+//                array.push_back(buf);
+//                buf = "";
+//                i++;
+//                continue;
 //            }
-//            ptr = strtok(NULL, sep);
-//        }while (ptr != NULL);
+//            buf += data[i];
+//        }
+//        if(buf != "") {
+//            array.push_back(buf);
+//        }
 //        return array;
+//    }
+//
+//    int validateReq(std::string data){
+//        int licznik = 0;
+//        for(size_t i = 0; i < data.size(); i++){
+//            if(data[i] == '\r'){
+//                if(data[i+1] == '\n'){
+//                    licznik++;
+//                    i++;
+//                }else{
+//                    error = true;
+//                }
+//            }
+//        }
+//        return licznik;
 //    }
 //
 //    void checkRequest(std::string req){
@@ -231,6 +264,9 @@ using namespace std;
 //                        continue;
 //                    }
 //                    FD_SET(s, &selectSocketSet);
+//                    if(dataNotComplete.find(s) != dataNotComplete.end()){
+//                        dataNotComplete.erase(s);
+//                    }
 //                    if (s > max_fd) {
 //                        max_fd = s;
 //                    }
@@ -239,16 +275,48 @@ using namespace std;
 //
 //                    if (read <= 0) { // druga strona zamknęła połączenie lub wystąpił błąd
 //                        FD_CLR(fd, &selectSocketSet);
+//                        if(dataNotComplete.find(fd) != dataNotComplete.end()){
+//                            dataNotComplete.erase(fd);
+//                        }
 //                        closeSocket(fd);
 //                        continue;
 //                    } else{ // tworzymy stringa
 //                        buf[read] = '\0';
 //                    }
 //
-//                    std::string input;
-//                    std::vector<std::string> dataWithoutWhiteSymbols = validator.splitBySep(buf, "\r\n");
+//                    std::string input = buf;
+//                    int quantityReq = validator.validateReq(buf);
+//
+//                    // wstepne sprawdzenie przed zrobieniem podzielenia na zapytania czy sa dobre separatory
+//                    if(validator.isError()){
+//                        std::string output = validator.buildAnswear();
+//                        int write = writeToSocket(fd,(void *)output.c_str(),output.length());
+//                        validator.resetValidator();
+//                        if(write == -1){
+//                            log_perror("Write");
+//                            FD_CLR(fd, &selectSocketSet);
+//
+//                            if(dataNotComplete.find(fd) != dataNotComplete.end()){
+//                                dataNotComplete.erase(fd);
+//                            }
+//                            close(fd);
+//                        }
+//                    }
+//
+//                    //tablica zapytan
+//                    std::vector<std::string> dataWithoutWhiteSymbols = validator.splitBySep(input);
+//
+//                    // logika dodawania niedokonczonego zapytania dla jednego znaku, bo to trudno sprawdzic w jendym warunku
+//                    if(read == 1){
+//                        if (dataNotComplete.find(fd) == dataNotComplete.end()) {
+//                            dataNotComplete[fd] = dataWithoutWhiteSymbols.back();
+//                        } else {
+//                            dataNotComplete[fd] += dataWithoutWhiteSymbols.back();
+//                        }
+//                        continue;
+//                    }
 //                    // dodawanie niedokończonych danych do bufora do późniejszej obródbki
-//                    if (read == bufSize && buf[bufSize - 1] != '\n' && buf[bufSize - 2] != '\r') {
+//                    if (buf[read - 1] != '\n' && buf[read - 2] != '\r') {
 //                        if (dataNotComplete.find(fd) == dataNotComplete.end()) {
 //                            dataNotComplete[fd] = dataWithoutWhiteSymbols.back();
 //                        } else {
@@ -261,6 +329,15 @@ using namespace std;
 //                        dataNotComplete.erase(fd);
 //                    }
 //
+//                    if(quantityReq > 0){
+//                        if (dataNotComplete.find(fd) != dataNotComplete.end()){
+//                            std::string temp = dataWithoutWhiteSymbols[0];
+//                            dataWithoutWhiteSymbols.at(0) = dataNotComplete[fd]+temp;
+//                            dataNotComplete.erase(fd);
+//                        }
+//                    }
+//
+//                    // obrobka poszczegolnych zapytan i wysylanie odpowiedzi
 //                    for(std::string& el : dataWithoutWhiteSymbols){
 //                        validator.validate(el,el.length());
 //                        validator.checkRequest(el);
@@ -271,6 +348,9 @@ using namespace std;
 //                        validator.resetValidator();
 //                        if(write == -1){
 //                            log_perror("Write");
+//                            if(dataNotComplete.find(fd) != dataNotComplete.end()){
+//                                dataNotComplete.erase(fd);
+//                            }
 //                            FD_CLR(fd, &selectSocketSet);
 //                            close(fd);
 //                        }
@@ -283,6 +363,9 @@ using namespace std;
 //        // zamknij wszystkie połączenia z klientami
 //        for (int fd = 0; fd <= max_fd; ++fd) {
 //            if (FD_ISSET(fd, &selectSocketSet) && fd != listenSocketDescriptor) {
+//                if(dataNotComplete.find(fd) != dataNotComplete.end()){
+//                    dataNotComplete.erase(fd);
+//                }
 //                closeSocket(fd);
 //            }
 //        }
@@ -440,11 +523,6 @@ int main(int argc, char** argv){
     }else{
         return -1;
     }
-//    Validator validator;
-//    std::vector<std::string> vector = validator.splitBySep("\r\nghjjghjg");
-//    cout << validator.validateReq("\r\nghjjghjg");
-//    for(auto& el : vector){
-//        cout << el << endl;
-//    }
     return 0;
+
 }
