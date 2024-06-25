@@ -169,15 +169,20 @@ class OsobyApp:
         query = f'SELECT * FROM {table}'
         if params is not None:
             params_table = []
+            params_value = []
             query = f'SELECT * FROM {table} WHERE '
             for key,value in params.items():
                 buf = ''
-                buf += key;buf += '=';buf += '\'';buf += value[0];buf += '\''
+                buf += key;buf += '=';buf += '?'
                 params_table.append(buf)
+                params_value.append(value[0])
             query += ' AND '.join(params_table)
         elif id is not None:
             query += ' WHERE id = ' + str(id)
-        crsr.execute(query)
+        if params is None:
+            crsr.execute(query)
+        else:
+            crsr.execute(query, params_value)
         colnames = [d[0] for d in crsr.description]
         rows = crsr.fetchall()
         crsr.close()
